@@ -1,1 +1,1 @@
-# CollegeFootballRecruiting
+I cleaned and analyzed college football recruiting data from 2012-2023 (50,000 observations) and transfer data from 2021-2023 (6,000 observations). I created a dashboard using RShiny that allows users to see recruiting and transfer rankings for each FBS conference and year. I used the data to establish a correlation between a team's recruiting and transfer classes and number of wins in 2022.
