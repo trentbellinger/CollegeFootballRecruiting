@@ -1,0 +1,456 @@
+---
+title: "College Football Recruiting"
+author: "Trent Bellinger"
+date: "2023-03-21"
+output: html_document
+---
+
+``` {r}
+library(devtools)
+library(ggplot2)
+library(lmtest)
+library(sandwich)
+library(car)
+library(AER)
+library(broom)
+library(leaps)
+library(Boruta)
+library("PerformanceAnalytics")
+library(corrgram)
+library(lmvar)
+
+transfer <- read.csv("transfers.csv", header = TRUE)
+recruits <- read.csv("CFB_Recruits_Data.csv", header = TRUE)
+data <- read.csv("cfb2022.csv", header = TRUE)
+
+transfer2021 <- transfer[transfer$season == 2021, ]
+transfer2022 <- transfer[transfer$season == 2022, ]
+transfer2023 <- transfer[transfer$season == 2023, ]
+```
+
+Creating a new dataset for each team's transfers for each year.
+``` {r}
+num2021 <- c()
+trans2021 <- tapply(transfer2021$destination, transfer2021$destination, length)
+for (i in seq_along(data$Team)) {
+  if (any(names(trans2021) == data$Team[i])) {
+    index <- which(names(trans2021) == data$Team[i])
+    num2021[i] <- trans2021[index]
+  } else {
+    num2021[i] <- 0
+  }
+}
+num2021
+trans2021
+
+num2022 <- c()
+trans2022 <- tapply(transfer2022$destination, transfer2022$destination, length)
+for (i in seq_along(data$Team)) {
+  if (any(names(trans2022) == data$Team[i])) {
+    index <- which(names(trans2022) == data$Team[i])
+    num2022[i] <- trans2022[index]
+  } else {
+    num2022[i] <- 0
+  }
+}
+num2022
+trans2022
+
+num2023 <- c()
+trans2023 <- tapply(transfer2023$destination, transfer2023$destination, length)
+for (i in seq_along(data$Team)) {
+  if (any(names(trans2023) == data$Team[i])) {
+    index <- which(names(trans2023) == data$Team[i])
+    num2023[i] <- trans2023[index]
+  } else {
+    num2023[i] <- 0
+  }
+}
+num2023
+trans2023
+
+stars2021 <- c()
+trans2021_stars <- tapply(transfer2021$stars, transfer2021$destination, mean)
+for (i in seq_along(data$Team)) {
+  if (any(names(trans2021_stars) == data$Team[i])) {
+    index <- which(names(trans2021_stars) == data$Team[i])
+    stars2021[i] <- trans2021_stars[index]
+  } else {
+    stars2021[i] <- 0
+  }
+}
+stars2021
+trans2021_stars
+
+stars2022 <- c()
+trans2022_stars <- tapply(transfer2022$stars, transfer2022$destination, mean)
+for (i in seq_along(data$Team)) {
+  if (any(names(trans2022_stars) == data$Team[i])) {
+    index <- which(names(trans2022_stars) == data$Team[i])
+    stars2022[i] <- trans2022_stars[index]
+  } else {
+    stars2022[i] <- 0
+  }
+}
+stars2022
+trans2022_stars
+
+stars2023 <- c()
+trans2023_stars <- tapply(transfer2023$stars, transfer2023$destination, mean)
+for (i in seq_along(data$Team)) {
+  if (any(names(trans2023_stars) == data$Team[i])) {
+    index <- which(names(trans2023_stars) == data$Team[i])
+    stars2023[i] <- trans2023_stars[index]
+  } else {
+    stars2023[i] <- 0
+  }
+}
+stars2023
+trans2023_stars
+
+team_transfers <- data.frame("Team" = data$Team, "Conference" = data$Conference, 
+                             "Transfers2021" = num2021, 
+                             "Transfers2022" = num2022, "Transfers2023" = num2023, 
+                             "AvgStars2021" = stars2021, "AvgStars2022" = stars2022, 
+                             "AvgStars2023" = stars2023, "Wins2022" = data$Win)
+head(team_transfers)
+
+write.csv(team_transfers, "/Users/trentbellinger/Desktop/College Football/team transfers.csv", 
+          row.names = FALSE)
+```
+
+```{r}
+team_transfers <- read.csv("team transfers.csv", header = TRUE)
+
+# average stars of transfers before 2022 season vs. wins in 2022 season
+plot(x = team_transfers$Wins2022, y = team_transfers$AvgStars2022, cex = 0.7, pch = 19)
+
+# number of transfers before 2022 season vs. wins in 2022 season
+plot(x = team_transfers$Wins2022, y = team_transfers$Transfers2022, cex = 0.7, pch = 19)
+```
+
+Now creating a new dataset for recruits using only FBS Schools
+
+```{r}
+head(recruits)
+
+# filter out recruits who did not commit to a school
+recruits_new <- recruits[!recruits$committed_to == "", ]
+
+# filter out any recruits that did not commit to the FBS schools we have data for
+schools <- names(table(recruits_new$committed_to))
+for (i in seq_along(schools)) {
+  if (!any(data$Team == schools[i])) {
+    index <- which(recruits_new$committed_to == schools[i])
+    recruits_new <- recruits_new[-index, ]
+  }
+}
+head(recruits_new)
+
+write.csv(recruits_new, "/Users/trentbellinger/Desktop/College Football/recruits.csv", 
+          row.names = FALSE)
+```
+
+Create a New Dataset for Recruits on Every Team
+```{r}
+names(table(recruits$year))
+
+recruits2012 <- recruits[recruits$year == 2012, ]
+recruits2013 <- recruits[recruits$year == 2013, ]
+recruits2014 <- recruits[recruits$year == 2014, ]
+recruits2015 <- recruits[recruits$year == 2015, ]
+recruits2016 <- recruits[recruits$year == 2016, ]
+recruits2017 <- recruits[recruits$year == 2017, ]
+recruits2018 <- recruits[recruits$year == 2018, ]
+recruits2019 <- recruits[recruits$year == 2019, ]
+recruits2020 <- recruits[recruits$year == 2020, ]
+recruits2021 <- recruits[recruits$year == 2021, ]
+recruits2022 <- recruits[recruits$year == 2022, ]
+recruits2023 <- recruits[recruits$year == 2023, ]
+
+num2023 <- c()
+rec2023 <- tapply(recruits2023$committed_to, recruits2023$committed_to, length)
+for (i in seq_along(data$Team)) {
+  if (any(names(rec2023) == data$Team[i])) {
+    index <- which(names(rec2023) == data$Team[i])
+    num2023[i] <- rec2023[index]
+  } else {
+    num2023[i] <- 0
+  }
+}
+num2023
+rec2023
+
+rating2022 <- c()
+rec2022_rating <- tapply(recruits2022$rating, recruits2022$committed_to, mean)
+for (i in seq_along(data$Team)) {
+  if (any(names(rec2022_rating) == data$Team[i])) {
+    index <- which(names(rec2022_rating) == data$Team[i])
+    rating2022[i] <- rec2022_rating[index]
+  } else {
+    rating2022[i] <- 0
+  }
+}
+
+stars2012 <- tapply(recruits2012$stars, recruits2012$committed_to, mean)
+length(stars2012)
+# 2013 done using above loop
+stars2014 <- tapply(recruits2014$stars, recruits2014$committed_to, mean)
+length(stars2014)
+stars2015 <- tapply(recruits2015$stars, recruits2015$committed_to, mean)
+length(stars2015)
+stars2016 <- tapply(recruits2016$stars, recruits2016$committed_to, mean)
+length(stars2016)
+stars2017 <- tapply(recruits2017$stars, recruits2017$committed_to, mean)
+length(stars2017)
+stars2018 <- tapply(recruits2018$stars, recruits2018$committed_to, mean)
+length(stars2018)
+stars2019 <- tapply(recruits2019$stars, recruits2019$committed_to, mean)
+length(stars2019)
+stars2020 <- tapply(recruits2020$stars, recruits2020$committed_to, mean)
+length(stars2020)
+# 2021 and 2022 done using above loop
+stars2023 <- tapply(recruits2023$stars, recruits2023$committed_to, mean)
+length(stars2023)
+
+rating2012 <- tapply(recruits2012$rating, recruits2012$committed_to, mean)
+# 2013 done using above loop
+rating2014 <- tapply(recruits2014$rating, recruits2014$committed_to, mean)
+rating2015 <- tapply(recruits2015$rating, recruits2015$committed_to, mean)
+rating2016 <- tapply(recruits2016$rating, recruits2016$committed_to, mean)
+rating2017 <- tapply(recruits2017$rating, recruits2017$committed_to, mean)
+rating2018 <- tapply(recruits2018$rating, recruits2018$committed_to, mean)
+rating2019 <- tapply(recruits2019$rating, recruits2019$committed_to, mean)
+rating2020 <- tapply(recruits2020$rating, recruits2020$committed_to, mean)
+# 2021 and 2022 done using above loop
+rating2023 <- tapply(recruits2023$rating, recruits2023$committed_to, mean)
+
+team_recruits <- data.frame("Team" = data$Team, "Conference" = data$Conference, 
+                            "Recruits2012" = num2012, 
+                            "AvgStars2012" = stars2012, "AvgRating2012" = rating2012, 
+                            "Recruits2013" = num2013, "AvgStars2013" = stars2013, 
+                            "AvgRating2013" = rating2013, "Recruits2014" = num2014, 
+                             "AvgStars2014" = stars2014, "AvgRating2014" = rating2014,
+                            "Recruits2015" = num2015, "AvgStars2015" = stars2015, 
+                            "AvgRating2015" = rating2015, "Recruits2016" = num2016, 
+                             "AvgStars2016" = stars2016, "AvgRating2016" = rating2016,
+                            "Recruits2017" = num2017, "AvgStars2017" = stars2017, 
+                            "AvgRating2017" = rating2017, "Recruits2018" = num2018, 
+                             "AvgStars2018" = stars2018, "AvgRating2018" = rating2018, 
+                            "Recruits2019" = num2019, "AvgStars2012" = stars2019, 
+                            "AvgRating2019" = rating2019, "Recruits2020" = num2020, 
+                             "AvgStars2020" = stars2020, "AvgRating2020" = rating2020,
+                            "Recruits2021" = num2021, "AvgStars2012" = stars2021, 
+                            "AvgRating2021" = rating2021, "Recruits2022" = num2022, 
+                             "AvgStars2022" = stars2022, "AvgRating2022" = rating2022,  
+                            "Recruits2023" = num2023, "AvgStars2023" = stars2023, 
+                            "AvgRating2023" = rating2023, "Wins2022" = data$Win)
+
+write.csv(team_recruits, "/Users/trentbellinger/Desktop/College Football/team recruits.csv", 
+          row.names = FALSE)
+```
+
+Pac-12 only data
+```{r}
+pac12 <- data[data$Conference == "Pac-12", ]
+
+pac12_recruits <- data.frame()
+for (i in seq_along(recruits_new$committed_to)) {
+  if (any(pac12$Team == recruits_new$committed_to[i])) {
+    pac12_recruits <- rbind(pac12_recruits, recruits_new[i, ])
+  }
+}
+
+pac12_recruits2019 <- pac12_recruits[pac12_recruits$year == 2019, ]
+plot(x = pac12$Win, y = tapply(pac12_recruits$rating, pac12_recruits$committed_to, mean), 
+     pch = 19, cex = 0.7)
+```
+
+Power 5 Only Data
+```{r}
+pwr5 <- data[data$Conference == "Pac-12" | data$Conference == "ACC" | data$Conference == "SEC" | 
+             data$Conference == "Big 12" | data$Conference == "Big Ten", ]
+
+pwr5_recruits <- data.frame()
+for (i in seq_along(recruits$committed_to)) {
+  if (any(pwr5$Team == recruits$committed_to[i])) {
+    pwr5_recruits <- rbind(pwr5_recruits, recruits[i, ])
+  }
+}
+
+pwr5_recruits2019 <- pwr5_recruits[pwr5_recruits$year == 2019, ]
+pwr5_recruits2020 <- pwr5_recruits[pwr5_recruits$year == 2020, ]
+plot(x = pwr5$Win, y = tapply(pwr5_recruits2020$rating, pwr5_recruits2020$committed_to, mean), 
+     pch = 19, cex = 0.7)
+```
+
+Looking to see which recruiting class most impacts team success
+```{r}
+team_recruits <- read.csv("team recruits.csv", header = TRUE)
+
+colnames(team_recruits)
+model1 <- lm(Wins2022 ~ Recruits2018 + AvgStars2018 + AvgRating2018 + Recruits2019 + AvgStars2019 +
+            AvgRating2019 + Recruits2020 + AvgStars2020 + AvgRating2020 + Recruits2021 + 
+            AvgStars2021 + AvgRating2021 + Recruits2022 + AvgStars2022 + AvgRating2022, 
+            data = team_recruits)
+summary(model) 
+# looks like avegare stars for 2019 and number of recruits for 2019 are most significant
+
+model2 <- lm(Wins2022 ~ AvgStars2019, data = team_recruits)
+summary(model2)
+plot(x = team_recruits$AvgStars2019, y = team_recruits$Wins2022, cex = 0.7, pch = 19)
+```
+
+App that allows users to see recruiting class rankings
+```{r}
+library(shiny)
+recruits <- read.csv("team recruits.csv", header = TRUE)
+head(recruits)
+
+sort_recruits <- c("Number of Recruits", "Average Stars Per Recruit", "Average Rating Per Recruit")
+sort_conference <- c("All FBS", "All Power 5", names(table(recruits$Conference)))
+sort_conference
+ui_recruits <- fluidPage(
+  fluidRow(
+    column(4, selectInput("year", label = "Recruiting Class Year: ", choices = 2012:2023)), 
+    column(4, selectInput("recruit", label = "Sort By: ", choices = sort_recruits)),
+    column(4, selectInput("conference", label = "Conference: ", choices = sort_conference))), 
+  plotOutput("plot"),
+  textOutput("model"),
+  textOutput("pvalue"),
+  dataTableOutput("table")
+)
+
+server_recruits <- function(input, output, session) {
+  dataset <- reactive ({
+    # sort by the selected conference
+    if (input$conference == "All FBS") {
+      data <- recruits
+    } else if (input$conference == "All Power 5") {
+      data <- recruits[recruits$Conference == "ACC" | recruits$Conference == "Big 12" | 
+                       recruits$Conference == "Big Ten" | recruits$Conference == "Pac-12" | 
+                       recruits$Conference == "SEC", ]
+    } else {
+      data <- recruits[recruits$Conference == input$conference, ]
+    }
+    # whether to show number of recruits, average stars per recruit, or average rating per recruit
+    if (input$recruit == "Number of Recruits") {
+      data <- data[, c("Team", paste("Recruits", input$year, sep = ""), "Wins2022")]
+    } else if (input$recruit == "Average Stars Per Recruit") {
+      data <- data[, c("Team", paste("AvgStars", input$year, sep = ""), "Wins2022")]
+    } else {
+      data <- data[, c("Team", paste("AvgRating", input$year, sep = ""), "Wins2022")]
+    }
+    # sort the data from greatest to lowest
+    data[order(data[, 2], decreasing = TRUE), ]
+  })
+  
+  linear_model <- reactive({
+    lm(dataset()[, "Wins2022"] ~ dataset()[, 2])
+  })
+  
+  output$plot <- renderPlot({
+     plot(x = dataset()[, 2], y = dataset()[, 3], pch = 19, ylab = "Wins in 2022", 
+          xlab = paste(input$recruit, "in", input$year), 
+          main = paste("Wins in 2022 vs.", paste(input$recruit, "in", input$year), 
+                       "for", input$conference, "Schools"))
+    abline(lsfit(x = dataset()[, 2], y = dataset()[, 3]), col = "red")
+  })
+  
+  output$model <- renderPrint({
+    noquote(paste0("Line of best fit: (Wins in 2022) = ", linear_model()[[1]][2], " * (",
+                   input$recruit, ") + ", linear_model()[[1]][1], \t))
+  })
+  
+  output$pvalue <- renderPrint({
+    p_value <- summary(linear_model())$coefficients[2, 4]
+    if (p_value >= 0.05) {
+      noquote(paste0(\t, "p-value = ", p_value, ". There is no significant relationship between", 
+                     " a team's number of wins in 2022 and ", input$recruit, " in ",
+                     input$conference))
+    } else {
+      noquote(paste0(\t, "p-value = ", p_value, ". There is a significant relationship between",
+                     " a team's number of wins in 2022 and ", input$recruit, " in ",
+                     input$conference, "."))
+    }
+  })
+  
+  output$table <- renderDataTable({
+    data.frame("Rank" = 1:nrow(dataset()), dataset()[, c(1, 2)])
+  })
+}
+
+recruits_app <- shinyApp(ui_recruits, server_recruits)
+
+recruits_app
+```
+
+App that allows users to see transfer class rankings
+```{r}
+transfers <- read.csv("team transfers.csv", header = TRUE)
+head(transfers)
+
+sort_transfers <- c("Number of Transfers", "Average Stars Per Transfer")
+sort_conference2 <- c("All FBS", "All Power 5", names(table(transfers$Conference)))
+ui_transfers <- fluidPage(
+  selectInput("year", label = "Transfer Class Year: ", choices = 2021:2023),
+  selectInput("transfer", label = "Sort By: ", choices = sort_transfers),
+  selectInput("conference", label = "Conference: ", choices = sort_conference2),
+  dataTableOutput("table"), 
+  plotOutput("plot")
+)
+
+server_transfers <- function(input, output, session) {
+  dataset <- reactive({
+    # choose what conference to show
+    if (input$conference == "All FBS") {
+      data <- transfers
+    } else if (input$conference == "All Power 5") {
+      data <- transfers[transfers$Conference == "ACC" | transfers$Conference == "Big 12" | 
+                       transfers$Conference == "Big Ten" | transfers$Conference == "Pac-12" | 
+                       transfers$Conference == "SEC", ]
+    } else {
+      data <- transfers[transfers$Conference == input$conference, ]
+    }
+    # whether to show number of transfers or average stars per transfer and for what year
+    if (input$transfer == "Number of Transfers") {
+      data <- data[, c("Team", paste("Transfers", input$year, sep = ""), "Wins2022")]
+    } else {
+      data <- data[, c("Team", paste("AvgStars", input$year, sep = ""), "Wins2022")]
+    }
+    # sort the data from greatest to lowest
+    data[order(data[, 2], decreasing = TRUE), ]
+  })
+  output$table <- renderDataTable({
+    data.frame("Rank" = 1:nrow(dataset()), dataset()[, c(1, 2)])
+  })
+  
+  output$plot <- renderPlot({
+     plot(x = dataset()[, 2], y = dataset()[, 3], pch = 19, ylab = "Wins in 2022", 
+          xlab = paste(input$transfer, "in", input$year), 
+          main = paste("Scatterplot of Wins in 2022 vs.", paste(input$transfer, "in", input$year), 
+                       "for", input$conference, "Schools"))
+    abline(lsfit(x = dataset()[, 2], y = dataset()[, 3]), col = "red")
+  })
+}
+
+transfer_app <- shinyApp(ui_transfers, server_transfers)
+
+transfer_app
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
